@@ -17,7 +17,9 @@ import {
   CreditCard,
   Briefcase,
   Sparkles,
-  Download
+  Download,
+  CalendarRange,
+  Clock
 } from "lucide-react";
 
 interface DashboardViewProps {
@@ -31,6 +33,7 @@ interface DashboardViewProps {
   onAddTransactionClick: () => void;
   onNavigateToTab: (tab: string) => void;
   onRefreshAllData: () => void;
+  recurringRules?: any[];
 }
 
 export function DashboardView({
@@ -43,7 +46,8 @@ export function DashboardView({
   lang,
   onAddTransactionClick,
   onNavigateToTab,
-  onRefreshAllData
+  onRefreshAllData,
+  recurringRules = []
 }: DashboardViewProps) {
   
   const t = translations[lang];
@@ -102,6 +106,66 @@ export function DashboardView({
   })).sort((a, b) => b.amount - a.amount);
 
   const totalCategorySum = categoriesData.reduce((sum, item) => sum + item.amount, 0);
+
+  // Helper to calculate projected recurring balance impact over 6 months
+  const calculateProjectedBalanceImpact = () => {
+    const monthlyNetImpacts = Array(6).fill(0);
+    const activeRules = (recurringRules || []).filter(rule => rule.isActive !== false);
+
+    for (let m = 0; m < 6; m++) {
+      let netForMonth = 0;
+      activeRules.forEach(rule => {
+        const amount = Number(rule.amount) || 0;
+        const multiplier = rule.type === "income" ? 1 : -1;
+        
+        let occurrences = 0;
+        const ruleInterval = (rule.interval || rule.frequency || "monthly").toLowerCase();
+        
+        if (ruleInterval === "daily") {
+          occurrences = 30;
+        } else if (ruleInterval === "weekly") {
+          occurrences = 4;
+        } else if (ruleInterval === "monthly") {
+          occurrences = 1;
+        } else if (ruleInterval === "yearly" || ruleInterval === "annually") {
+          if (rule.nextRunDate) {
+            try {
+              const ruleMonth = new Date(rule.nextRunDate).getMonth();
+              if (ruleMonth === m) {
+                occurrences = 1;
+              }
+            } catch (e) {
+              occurrences = 0;
+            }
+          } else {
+            if (m === 5) occurrences = 1; // Default to June if no nextRunDate
+          }
+        } else {
+          occurrences = 1;
+        }
+
+        netForMonth += amount * multiplier * occurrences;
+      });
+      monthlyNetImpacts[m] = netForMonth;
+    }
+
+    // Cumulative balance tracking starting from totalBalance, bounded to look good in viewport
+    const startingBaseline = Math.min(Math.max(totalBalance, 30000), 75000);
+    const cumulativeProjections = [];
+    let currentProjection = startingBaseline;
+
+    for (let m = 0; m < 6; m++) {
+      currentProjection += monthlyNetImpacts[m];
+      cumulativeProjections.push(Math.max(5000, Math.min(currentProjection, 88000)));
+    }
+
+    return {
+      monthlyNetImpacts,
+      cumulativeProjections
+    };
+  };
+
+  const { monthlyNetImpacts, cumulativeProjections } = calculateProjectedBalanceImpact();
 
   // Overall combined budget progress
   const globalBudget = budgets.find(b => b.category === "all" && b.month === currentMonthStr) ||
@@ -327,6 +391,16 @@ export function DashboardView({
   const donutY = 75;
   const donutCircumference = 2 * Math.PI * donutRadius;
 
+  // Filter the next 3 upcoming recurring transactions using a filter on recurringRules
+  const filteredUpcomingBills = [...recurringRules]
+    .filter(rule => rule.nextRunDate)
+    .sort((a, b) => {
+      const dateA = new Date(a.nextRunDate).getTime();
+      const dateB = new Date(b.nextRunDate).getTime();
+      return dateA - dateB;
+    })
+    .slice(0, 3);
+
   return (
     <div className="space-y-6 animate-fade-in text-left">
       
@@ -377,7 +451,18 @@ export function DashboardView({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         
         {/* Card 1: Balance */}
-        <div className="glass-panel p-5 rounded-2xl shadow border border-slate-200/80 dark:border-slate-800/80 hover:shadow-lg transition">
+        <div 
+          onClick={() => onNavigateToTab("accounts")}
+          className="glass-panel p-5 rounded-2xl shadow border border-slate-200/80 dark:border-slate-800/80 hover:shadow-lg transition-all duration-300 hover:scale-[1.03] hover:shadow-indigo-500/10 hover:border-indigo-500/30 relative group cursor-pointer"
+        >
+          {/* Quick View Details Badge on Hover */}
+          <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-all duration-300 transform -translate-y-1 group-hover:translate-y-0 z-10">
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-indigo-600 dark:bg-indigo-500 text-white px-2.5 py-0.5 rounded-full shadow-sm">
+              <span>{lang === 'bn' ? "বিস্তারিত" : "View Details"}</span>
+              <ArrowRight className="h-2.5 w-2.5" />
+            </span>
+          </div>
+
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
             <span className="text-xs font-semibold uppercase tracking-wider">{t.totalBalance}</span>
             <div className="h-8 w-8 rounded-lg bg-indigo-500/10 dark:bg-indigo-500/10 flex items-center justify-center">
@@ -396,7 +481,18 @@ export function DashboardView({
         </div>
 
         {/* Card 2: Income */}
-        <div className="glass-panel p-5 rounded-2xl shadow border border-slate-200/80 dark:border-slate-800/80 hover:shadow-lg transition">
+        <div 
+          onClick={() => onNavigateToTab("transactions")}
+          className="glass-panel p-5 rounded-2xl shadow border border-slate-200/80 dark:border-slate-800/80 hover:shadow-lg transition-all duration-300 hover:scale-[1.03] hover:shadow-emerald-500/10 hover:border-emerald-500/30 relative group cursor-pointer"
+        >
+          {/* Quick View Details Badge on Hover */}
+          <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-all duration-300 transform -translate-y-1 group-hover:translate-y-0 z-10">
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-600 dark:bg-emerald-500 text-white px-2.5 py-0.5 rounded-full shadow-sm">
+              <span>{lang === 'bn' ? "বিস্তারিত" : "View Details"}</span>
+              <ArrowRight className="h-2.5 w-2.5" />
+            </span>
+          </div>
+
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
             <span className="text-xs font-semibold uppercase tracking-wider">{t.totalIncome}</span>
             <div className="h-8 w-8 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/10 flex items-center justify-center animate-pulse">
@@ -414,7 +510,18 @@ export function DashboardView({
         </div>
 
         {/* Card 3: Expense */}
-        <div className="glass-panel p-5 rounded-2xl shadow border border-slate-200/80 dark:border-slate-800/80 hover:shadow-lg transition">
+        <div 
+          onClick={() => onNavigateToTab("transactions")}
+          className="glass-panel p-5 rounded-2xl shadow border border-slate-200/80 dark:border-slate-800/80 hover:shadow-lg transition-all duration-300 hover:scale-[1.03] hover:shadow-rose-500/10 hover:border-rose-500/30 relative group cursor-pointer"
+        >
+          {/* Quick View Details Badge on Hover */}
+          <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-all duration-300 transform -translate-y-1 group-hover:translate-y-0 z-10">
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-rose-600 dark:bg-rose-500 text-white px-2.5 py-0.5 rounded-full shadow-sm">
+              <span>{lang === 'bn' ? "বিস্তারিত" : "View Details"}</span>
+              <ArrowRight className="h-2.5 w-2.5" />
+            </span>
+          </div>
+
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
             <span className="text-xs font-semibold uppercase tracking-wider">{t.totalExpenses}</span>
             <div className="h-8 w-8 rounded-lg bg-red-500/10 dark:bg-red-500/10 flex items-center justify-center">
@@ -432,7 +539,18 @@ export function DashboardView({
         </div>
 
         {/* Card 4: Savings Rate */}
-        <div className="glass-panel p-5 rounded-2xl shadow border border-slate-200/80 dark:border-slate-800/80 hover:shadow-lg transition">
+        <div 
+          onClick={() => onNavigateToTab("savings")}
+          className="glass-panel p-5 rounded-2xl shadow border border-slate-200/80 dark:border-slate-800/80 hover:shadow-lg transition-all duration-300 hover:scale-[1.03] hover:shadow-cyan-500/10 hover:border-cyan-500/30 relative group cursor-pointer"
+        >
+          {/* Quick View Details Badge on Hover */}
+          <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-all duration-300 transform -translate-y-1 group-hover:translate-y-0 z-10">
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-cyan-600 dark:bg-cyan-500 text-white px-2.5 py-0.5 rounded-full shadow-sm">
+              <span>{lang === 'bn' ? "বিস্তারিত" : "View Details"}</span>
+              <ArrowRight className="h-2.5 w-2.5" />
+            </span>
+          </div>
+
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
             <span className="text-xs font-semibold uppercase tracking-wider">{t.netSavingsRate}</span>
             <div className="h-8 w-8 rounded-lg bg-cyan-500/10 dark:bg-cyan-500/10 flex items-center justify-center">
@@ -566,7 +684,18 @@ export function DashboardView({
         <div className="lg:col-span-8 space-y-6">
           
           {/* Visual SVG charts area */}
-          <div className="glass-panel p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow">
+          <div 
+            onClick={() => onNavigateToTab("transactions")}
+            className="glass-panel p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow transition-all duration-300 hover:scale-[1.015] hover:shadow-indigo-500/5 hover:border-indigo-500/25 relative group cursor-pointer"
+          >
+            {/* Hover details badge */}
+            <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-all duration-300 transform -translate-y-1 group-hover:translate-y-0 z-15 pointer-events-none">
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-indigo-600 dark:bg-indigo-500 text-white px-2.5 py-0.5 rounded-full shadow-sm">
+                <span>{lang === 'bn' ? "বিস্তারিত" : "View Details"}</span>
+                <ArrowRight className="h-2.5 w-2.5" />
+              </span>
+            </div>
+
             <div className="flex items-center justify-between border-b border-slate-200/10 pb-4">
               <div>
                 <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">{t.monthlyOverview}</h3>
@@ -586,6 +715,49 @@ export function DashboardView({
                 <div className="border-b border-slate-200 dark:border-slate-800/45 w-full h-[1px]" />
               </div>
 
+              {/* Decorative Gradient Line Overlay for Projected Balance */}
+              <svg 
+                className="absolute inset-x-0 bottom-6 h-44 w-full pointer-events-none z-15" 
+                viewBox="0 0 600 176" 
+                preserveAspectRatio="none"
+              >
+                <defs>
+                  <linearGradient id="swProjectedAreaGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stopColor="#6366F1" stopOpacity="0.2" />
+                    <stop offset="100%" stopColor="#6366F1" stopOpacity="0.0" />
+                  </linearGradient>
+                </defs>
+
+                {/* Area under line */}
+                <path
+                  d={`M 50,176 
+                      L 50,${176 - (cumulativeProjections[0] / 90000) * 176} 
+                      L 150,${176 - (cumulativeProjections[1] / 90000) * 176} 
+                      L 250,${176 - (cumulativeProjections[2] / 90000) * 176} 
+                      L 350,${176 - (cumulativeProjections[3] / 90000) * 176} 
+                      L 450,${176 - (cumulativeProjections[4] / 90000) * 176} 
+                      L 550,${176 - (cumulativeProjections[5] / 90000) * 176} 
+                      L 550,176 Z`}
+                  fill="url(#swProjectedAreaGrad)"
+                />
+
+                {/* Glowing Polyline */}
+                <path
+                  d={`M 50,${176 - (cumulativeProjections[0] / 90000) * 176} 
+                      L 150,${176 - (cumulativeProjections[1] / 90000) * 176} 
+                      L 250,${176 - (cumulativeProjections[2] / 90000) * 176} 
+                      L 350,${176 - (cumulativeProjections[3] / 90000) * 176} 
+                      L 450,${176 - (cumulativeProjections[4] / 90000) * 176} 
+                      L 550,${176 - (cumulativeProjections[5] / 90000) * 176}`}
+                  fill="none"
+                  stroke="#6366F1"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="drop-shadow-[0_2px_6px_rgba(99,102,241,0.6)]"
+                />
+              </svg>
+
               {/* Plausible Monthly comparison bars */}
               {[
                 { month: "Jan", income: 55000, expense: 32000 },
@@ -593,7 +765,7 @@ export function DashboardView({
                 { month: "Mar", income: 58000, expense: 38000 },
                 { month: "Apr", income: 62000, expense: 45000 },
                 { month: "May", income: 75000, expense: 49000 },
-                { month: "Jun", income: totalIncome || 80000, expense: totalExpense || 32000 }
+                 { month: "Jun", income: totalIncome || 80000, expense: totalExpense || 32000 }
               ].map((item, idx) => {
                 const maxVal = 90000;
                 const incHeight = (item.income / maxVal) * 100;
@@ -623,6 +795,27 @@ export function DashboardView({
                         </div>
                       </div>
 
+                      {/* Interactive node for Projected Balance */}
+                      <div
+                        style={{ bottom: `calc(${(cumulativeProjections[idx] / 90000) * 100}% - 4px)` }}
+                        className="absolute left-1/2 -translate-x-1/2 h-2.5 w-2.5 rounded-full bg-indigo-500 border border-white dark:border-slate-950 shadow shadow-indigo-500/80 z-20 transition-all duration-200 group-hover:scale-130 group-hover:bg-indigo-300 cursor-pointer"
+                      >
+                        <div className="absolute -top-16 left-1/2 -translate-x-1/2 bg-slate-950/95 border border-indigo-500/40 text-[10px] p-2 rounded-xl hidden group-hover:flex flex-col gap-0.5 whitespace-nowrap text-white z-30 shadow-lg shadow-black/80 backdrop-blur-sm">
+                          <span className="font-extrabold text-indigo-300 tracking-wide">
+                            {lang === 'bn' ? "প্রক্ষিপ্ত ব্যালেন্স:" : "Projected Balance:"}
+                          </span>
+                          <span className="font-bold text-xs font-mono">
+                            {currencySign}{Math.round(cumulativeProjections[idx]).toLocaleString()}
+                          </span>
+                          <span className="text-[8px] text-slate-400 font-medium">
+                            {lang === 'bn' ? "পৌনঃপুনিক প্রবাহ:" : "Recurring Flow:"}{" "}
+                            <span className={monthlyNetImpacts[idx] >= 0 ? "text-emerald-400 font-bold" : "text-rose-450 font-bold"}>
+                              {monthlyNetImpacts[idx] >= 0 ? "+" : ""}{currencySign}{Math.round(monthlyNetImpacts[idx]).toLocaleString()}
+                            </span>
+                          </span>
+                        </div>
+                      </div>
+
                     </div>
                     
                     <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 tracking-wider">
@@ -633,7 +826,7 @@ export function DashboardView({
               })}
             </div>
             
-            <div className="flex justify-center items-center gap-5 mt-4 text-[10px] sm:text-xs">
+            <div className="flex justify-center items-center gap-5 mt-4 text-[10px] sm:text-xs flex-wrap">
               <div className="flex items-center gap-1.5">
                 <span className="h-2.5 w-2.5 rounded bg-emerald-500" />
                 <span className="text-slate-500 dark:text-slate-400">{t.incoming}</span>
@@ -642,11 +835,31 @@ export function DashboardView({
                 <span className="h-2.5 w-2.5 rounded bg-red-500" />
                 <span className="text-slate-500 dark:text-slate-400">{t.outgoing}</span>
               </div>
+              <div className="flex items-center gap-1.5 border-l border-slate-200 dark:border-slate-800/80 pl-4">
+                <span className="flex items-center justify-center relative w-5 h-2">
+                  <span className="h-[2px] w-5 bg-indigo-500" />
+                  <span className="h-2 w-2 rounded-full bg-indigo-400 border border-white dark:border-slate-950 absolute" />
+                </span>
+                <span className="text-slate-500 dark:text-slate-400">
+                  {lang === 'bn' ? "প্রক্ষিপ্ত ভারসাম্য প্রভাব" : "Projected Impact (Recurring)"}
+                </span>
+              </div>
             </div>
           </div>
 
           {/* Expense categories listings breakdown */}
-          <div className="glass-panel p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow">
+          <div 
+            onClick={() => onNavigateToTab("budgets")}
+            className="glass-panel p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow transition-all duration-300 hover:scale-[1.015] hover:shadow-indigo-500/5 hover:border-indigo-500/25 relative group cursor-pointer"
+          >
+            {/* Hover details badge */}
+            <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-all duration-300 transform -translate-y-1 group-hover:translate-y-0 z-15 pointer-events-none">
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-indigo-600 dark:bg-indigo-500 text-white px-2.5 py-0.5 rounded-full shadow-sm">
+                <span>{lang === 'bn' ? "বিস্তারিত" : "View Details"}</span>
+                <ArrowRight className="h-2.5 w-2.5" />
+              </span>
+            </div>
+
             <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">{t.topExpenseCategories}</h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">{lang === 'bn' ? "চলতি মাসের ব্যয়ের বৃহত্তম উৎসসমূহ" : "Largest leaking sources of capital during current cycle"}</p>
 
@@ -739,7 +952,18 @@ export function DashboardView({
           </div>
           
           {/* Quick Snapshot Gauge Card */}
-          <div className="glass-panel p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow hover:shadow-lg transition">
+          <div 
+            onClick={() => onNavigateToTab("transactions")}
+            className="glass-panel p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow transition-all duration-300 hover:scale-[1.03] hover:shadow-indigo-500/5 hover:border-indigo-500/25 relative group cursor-pointer"
+          >
+            {/* Hover details badge */}
+            <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-all duration-300 transform -translate-y-1 group-hover:translate-y-0 z-15 pointer-events-none">
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-indigo-600 dark:bg-indigo-500 text-white px-2.5 py-0.5 rounded-full shadow-sm">
+                <span>{lang === 'bn' ? "বিস্তারিত" : "View Details"}</span>
+                <ArrowRight className="h-2.5 w-2.5" />
+              </span>
+            </div>
+
             <div className="flex items-center justify-between border-b border-slate-200/10 pb-3 mb-4">
               <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 {t.quickSnapshot}
@@ -839,7 +1063,18 @@ export function DashboardView({
           </div>
 
           {/* Budget Progress meter card */}
-          <div className="glass-panel p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow">
+          <div 
+            onClick={() => onNavigateToTab("budgets")}
+            className="glass-panel p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow transition-all duration-300 hover:scale-[1.03] hover:shadow-indigo-500/5 hover:border-indigo-500/25 relative group cursor-pointer"
+          >
+            {/* Hover details badge */}
+            <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-all duration-300 transform -translate-y-1 group-hover:translate-y-0 z-15 pointer-events-none">
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-indigo-600 dark:bg-indigo-500 text-white px-2.5 py-0.5 rounded-full shadow-sm">
+                <span>{lang === 'bn' ? "বিস্তারিত" : "View Details"}</span>
+                <ArrowRight className="h-2.5 w-2.5" />
+              </span>
+            </div>
+
             <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{t.budgetUsage}</h3>
             
             <div className="mt-4 text-center">
@@ -864,6 +1099,82 @@ export function DashboardView({
               <div className="mt-3.5 p-2 px-3 bg-red-955/20 border border-red-900/50 rounded-lg text-[10px] text-red-00 flex items-start gap-1.5">
                 <AlertTriangle className="h-4 w-4 shrink-0 focus:outline-none" />
                 <span>{t.budgetOverLimit}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Upcoming Bills & Recurring automation widget */}
+          <div 
+            onClick={() => onNavigateToTab("recurring")}
+            className="glass-panel p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow transition-all duration-300 hover:scale-[1.03] hover:shadow-indigo-500/5 hover:border-indigo-500/25 relative group cursor-pointer"
+          >
+            {/* Hover details badge */}
+            <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-all duration-300 transform -translate-y-1 group-hover:translate-y-0 z-15 pointer-events-none">
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-indigo-600 dark:bg-indigo-500 text-white px-2.5 py-0.5 rounded-full shadow-sm">
+                <span>{lang === 'bn' ? "বিস্তারিত" : "View Details"}</span>
+                <ArrowRight className="h-2.5 w-2.5" />
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between border-b border-slate-200/10 pb-3 mb-4">
+              <div className="flex items-center gap-1.5">
+                <Clock className="h-4.5 w-4.5 text-indigo-400 shrink-0" />
+                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  {lang === 'bn' ? "আসন্ন বিল ও চার্জসমূহ" : "Upcoming Bills & Charges"}
+                </h3>
+              </div>
+              <button
+                onClick={() => onNavigateToTab("recurring")}
+                className="text-[10px] text-indigo-500 hover:underline font-bold tracking-wider uppercase cursor-pointer"
+              >
+                {lang === 'bn' ? "সবগুলো" : "Manage"}
+              </button>
+            </div>
+
+            {filteredUpcomingBills.length === 0 ? (
+              <div className="text-center py-6 text-slate-500 text-xs">
+                <CalendarRange className="h-7 w-7 text-slate-600 dark:text-slate-500 mx-auto mb-2 opacity-50" />
+                <p>{lang === 'bn' ? "কোনো আসন্ন অটো-বিল পাওয়া যায়নি।" : "No upcoming automated bill rules found."}</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredUpcomingBills.map((bill) => {
+                  const accountObj = accounts.find(a => a.id === bill.accountId);
+                  return (
+                    <div
+                      key={bill.id}
+                      className="bg-slate-100/50 dark:bg-slate-900/40 p-3 rounded-xl border border-slate-200/30 dark:border-slate-800/30 text-xs flex justify-between items-center transition hover:border-indigo-500/20"
+                    >
+                      <div className="text-left space-y-1 overflow-hidden pr-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[8px] font-extrabold uppercase bg-indigo-500/10 text-indigo-400 px-1.5 py-0.5 rounded tracking-wider animate-pulse">
+                            {bill.interval}
+                          </span>
+                          <span className="font-bold text-slate-800 dark:text-slate-200 truncate block">
+                            {bill.name}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5 flex-wrap">
+                          <span className="font-mono">{lang === 'bn' ? 'তারিখ:' : 'Due:'} {bill.nextRunDate}</span>
+                          {accountObj && (
+                            <span className="truncate border-l border-slate-350 dark:border-slate-800/80 pl-1.5">
+                              {accountObj.name}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <span className={`font-mono font-black ${bill.type === 'income' ? 'text-emerald-500' : 'text-slate-800 dark:text-slate-200'}`}>
+                          {bill.type === "income" ? "+" : "-"}{currencySign}{bill.amount.toLocaleString()}
+                        </span>
+                        <span className="text-[8px] uppercase tracking-wider block text-slate-500 mt-0.5 font-bold">
+                          {bill.type === "income" ? (lang === 'bn' ? "আয়" : "INCOME") : (lang === 'bn' ? "ব্যয়" : "EXPENSE")}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

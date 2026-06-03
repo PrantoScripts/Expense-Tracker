@@ -13,6 +13,7 @@ import { SettingsView } from "./components/SettingsView";
 import { HelpView } from "./components/HelpView";
 import { SmartCoachChat } from "./components/SmartCoachChat";
 import { translations, getTranslatedCategory } from "./locales";
+import { ReceiptCameraScanner } from "./components/ReceiptCameraScanner";
 
 import {
   X,
@@ -24,7 +25,9 @@ import {
   Layers,
   BellRing,
   Trash2,
-  ListCollapse
+  ListCollapse,
+  Camera,
+  Sparkles
 } from "lucide-react";
 
 export default function App() {
@@ -53,6 +56,7 @@ export default function App() {
   // Popups/Modals
   const [showAddTransactionModal, setShowAddTransactionModal] = useState(false);
   const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false);
+  const [showCameraScanner, setShowCameraScanner] = useState(false);
   const [txToEdit, setTxToEdit] = useState<any | null>(null);
 
   // Form entries for Add/Edit Transaction
@@ -70,7 +74,7 @@ export default function App() {
 
   const t = translations[lang];
 
-  // Apply visual theme to document body
+  // Apply visual theme to document body and sync with database
   useEffect(() => {
     const root = window.document.documentElement;
     if (theme === 'dark') {
@@ -81,7 +85,12 @@ export default function App() {
       root.style.backgroundColor = "#fafafa";
     }
     localStorage.setItem("spendwise_theme", theme);
-  }, [theme]);
+
+    // Sync themePreference to database whenever theme state changes for cross-device usage
+    if (user && token && user.themePreference !== theme) {
+      handleUpdateUserProfile({ themePreference: theme });
+    }
+  }, [theme, user, token]);
 
   // Persist language preference
   useEffect(() => {
@@ -625,6 +634,9 @@ export default function App() {
             theme={theme}
             setTheme={setTheme}
             onUpdateUser={handleUpdateUserProfile}
+            transactions={transactions}
+            budgets={budgets}
+            goals={goals}
           />
         );
       case "admin":
@@ -639,6 +651,7 @@ export default function App() {
             goals={goals}
             notifications={notifications}
             lang={lang}
+            recurringRules={recurringRules}
             onAddTransactionClick={handleOpenAddTx}
             onNavigateToTab={(tab) => setActiveTab(tab)}
             onRefreshAllData={fetchAllData}
@@ -773,6 +786,32 @@ export default function App() {
               <CreditCard className="h-5 w-5 text-indigo-400" />
               <span>{txToEdit ? (lang === 'bn' ? "লেনদেনের তথ্য পরিবর্তন করুন" : "Amend Ledger journal") : (lang === 'bn' ? "নতুন লেনদেনের তথ্য যুক্ত করুন" : "Add Ledger Entry")}</span>
             </h3>
+
+            {/* AI Receipt Scanning Assist Bar */}
+            {!txToEdit && (
+              <div className="bg-indigo-950/40 border border-indigo-500/20 rounded-xl p-3 flex items-center justify-between gap-3 shadow-inner mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-indigo-500/10 rounded-lg text-indigo-400 animate-pulse">
+                    <Sparkles className="h-3.5 w-3.5" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-indigo-300 tracking-wider block">AI Receipt Scanner</span>
+                    <span className="text-[10px] text-slate-400">
+                      {lang === 'bn' ? "রিসিটের ছবি আপলোড করে স্বয়ংক্রিয় তথ্য ইনপুট করুন" : "Upload receipt photo to let Gemini AI auto-fill details"}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  id="trigger-camera-scanner-modal"
+                  type="button"
+                  onClick={() => setShowCameraScanner(true)}
+                  className="p-1.5 px-3 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold rounded-lg flex items-center gap-1 cursor-pointer transition shadow-sm shrink-0"
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  <span>{lang === 'bn' ? "ছবি আপলোড" : "Upload File"}</span>
+                </button>
+              </div>
+            )}
 
             <form onSubmit={handleTxSubmit} className="space-y-4">
               
@@ -973,9 +1012,27 @@ export default function App() {
                     setShowAddTransactionModal(false);
                     setTxToEdit(null);
                   }}
-                  className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition cursor-pointer text-center"
+                  className="flex-1 py-2.5 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-400 rounded-xl text-xs font-bold transition cursor-pointer text-center"
                 >
                   {t.cancel}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTxAccountId(accounts[0]?.id || "");
+                    setTxType("expense");
+                    setTxAmount("");
+                    setTxCategory("Bills");
+                    setTxDate(new Date().toISOString().substring(0, 10));
+                    setTxNote("");
+                    setTxReceiptUrl("");
+                    setTxIsRecurring(false);
+                    setTxRecFrequency("monthly");
+                    setTxRecEndDate("");
+                  }}
+                  className="flex-1 py-2.5 bg-slate-800 border border-slate-700/60 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition cursor-pointer text-center"
+                >
+                  {lang === 'bn' ? "মুছে ফেলুন" : "Clear"}
                 </button>
                 <button
                   id="modal-tx-submit-btn"
@@ -993,6 +1050,27 @@ export default function App() {
 
       {token && (
         <SmartCoachChat lang={lang} token={token} currency={currency} />
+      )}
+
+      {showCameraScanner && (
+        <ReceiptCameraScanner
+          lang={lang}
+          onClose={() => setShowCameraScanner(false)}
+          onScanSuccess={(scanned) => {
+            if (scanned.amount) {
+              setTxAmount(scanned.amount.toString());
+            }
+            if (scanned.date) {
+              setTxDate(scanned.date);
+            }
+            if (scanned.note) {
+              setTxNote(scanned.note);
+            }
+            if (scanned.category) {
+              setTxCategory(scanned.category);
+            }
+          }}
+        />
       )}
 
     </div>

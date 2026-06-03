@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { translations } from "../locales";
-import { User, Shield, Wallet, PlayCircle, Eye, EyeOff } from "lucide-react";
+import { User, Shield, Eye, EyeOff } from "lucide-react";
+import { SpendWiseLogo } from "./SpendWiseLogo";
 
 interface AuthViewProps {
   onLoginSuccess: (token: string, user: any) => void;
@@ -116,9 +117,7 @@ export function AuthView({ onLoginSuccess, lang }: AuthViewProps) {
         
         {/* Brand Header */}
         <div className="flex flex-col items-center mb-8 text-center">
-          <div className="h-12 w-12 rounded-xl bg-gradient-to-tr from-indigo-600 to-cyan-400 flex items-center justify-center shadow-lg shadow-indigo-500/10 mb-3">
-            <Wallet className="h-6 w-6 text-white" />
-          </div>
+          <SpendWiseLogo className="h-14 w-14 mb-3 filter drop-shadow-[0_4px_12px_rgba(59,130,246,0.35)]" />
           <h1 className="text-3xl font-bold bg-gradient-to-r from-white via-slate-200 to-indigo-200 bg-clip-text text-transparent">
             {t.appName}
           </h1>
@@ -265,37 +264,6 @@ export function AuthView({ onLoginSuccess, lang }: AuthViewProps) {
             </span>
           </button>
         </div>
-
-        {/* Fast Sandbox Access */}
-        <div className="mt-8 border-t border-slate-800/80 pt-6">
-          <p className="text-xs text-indigo-400/90 font-medium tracking-wider uppercase mb-3 flex items-center justify-center gap-1">
-            <PlayCircle className="h-4 w-4" />
-            {t.demoAccountNotice}
-          </p>
-          <div className="grid grid-cols-2 gap-3.5">
-            <button
-              id="quick-demo-user-btn"
-              type="button"
-              onClick={() => handleQuickLogin("demo@spendwise.com", "demo123")}
-              className="bg-slate-950/60 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 p-2.5 rounded-xl text-left outline-none transition cursor-pointer group hover:-translate-y-0.5"
-            >
-              <div className="text-xs font-semibold text-white group-hover:text-indigo-300">Abu Sayeed Pranto</div>
-              <div className="text-[10px] text-slate-500">demo@spendwise.com</div>
-              <div className="text-[9px] text-indigo-400/80 px-1 bg-indigo-500/10 rounded border border-indigo-500/10 mt-1 inline-block">SaaS Client</div>
-            </button>
-            <button
-              id="quick-admin-user-btn"
-              type="button"
-              onClick={() => handleQuickLogin("admin@spendwise.com", "admin123")}
-              className="bg-slate-950/60 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 p-2.5 rounded-xl text-left outline-none transition cursor-pointer group hover:-translate-y-0.5"
-            >
-              <div className="text-xs font-semibold text-white group-hover:text-cyan-300 font-sans">Systems Admin</div>
-              <div className="text-[10px] text-slate-500 font-sans">admin@spendwise.com</div>
-              <div className="text-[9px] text-cyan-400/80 px-1 bg-cyan-500/10 rounded border border-cyan-500/10 mt-1 inline-block">Full Controller</div>
-            </button>
-          </div>
-        </div>
-
       </div>
     </div>
   );

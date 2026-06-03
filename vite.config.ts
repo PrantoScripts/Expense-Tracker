@@ -5,6 +5,7 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
+    base: './', // Ensures relative assets loading for subfolder deployments (like /projects/ExpenseTracker/)
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {

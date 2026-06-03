@@ -1,5 +1,6 @@
 import React from "react";
 import { translations } from "../locales";
+import { SpendWiseLogo } from "./SpendWiseLogo";
 import {
   Layers,
   ListMinus,
@@ -52,12 +53,10 @@ export function Sidebar({
   return (
     <aside className="flex h-screen w-64 flex-col border-r border-slate-200 bg-white text-slate-800 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 transition-colors duration-200">
       
-      {/* Brand Header with Geometric Logo */}
+      {/* Brand Header with Custom Logo */}
       <div className="flex h-16 items-center justify-between px-6 border-b border-slate-200/60 dark:border-slate-800">
         <div className="flex items-center gap-2.5 text-indigo-600 dark:text-indigo-400">
-          <div className="h-8 w-8 rounded-lg bg-indigo-600 flex items-center justify-center shrink-0">
-            <div className="h-4 w-4 rounded-sm border-2 border-white"></div>
-          </div>
+          <SpendWiseLogo className="h-9 w-9 shrink-0" />
           <div>
             <span className="text-lg font-bold tracking-tight text-slate-900 dark:text-white block leading-tight">
               {t.appName}

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { translations, getTranslatedCategory } from "../locales";
-import { PieChart, Plus, Trash2, AlertTriangle, ShieldCheck, HelpCircle } from "lucide-react";
+import { PieChart, Plus, Trash2, AlertTriangle, ShieldCheck, HelpCircle, Sparkles, TrendingUp, CheckCircle, RefreshCw, Star } from "lucide-react";
 
 interface BudgetsViewProps {
   budgets: any[];
@@ -29,6 +29,156 @@ export function BudgetsView({
   const [budgetType, setBudgetType] = useState<'monthly' | 'category'>('monthly');
 
   const currencySign = currency === "BDT" ? "৳" : "$";
+
+  // AI Insights Recommendation System
+  const [applyingId, setApplyingId] = useState<string | null>(null);
+
+  // 1. Group all expense transactions by Year-Month & Category
+  const monthlyCategorySpend: { [month: string]: { [category: string]: number } } = {};
+  const allMonthsSet = new Set<string>();
+  const allCategoriesWithExpenses = new Set<string>();
+
+  transactions.forEach((tx) => {
+    if (tx.type !== "expense") return;
+    const month = tx.date.substring(0, 7); // "YYYY-MM"
+    allMonthsSet.add(month);
+    
+    // Normalize category
+    const catName = tx.category.trim();
+    allCategoriesWithExpenses.add(catName);
+    
+    if (!monthlyCategorySpend[month]) {
+      monthlyCategorySpend[month] = {};
+    }
+    if (!monthlyCategorySpend[month][catName]) {
+      monthlyCategorySpend[month][catName] = 0;
+    }
+    monthlyCategorySpend[month][catName] += Number(tx.amount) || 0;
+  });
+
+  const sortedMonths = Array.from(allMonthsSet).sort();
+
+  interface AIRecommendation {
+    category: string;
+    hasBudget: boolean;
+    currentLimit: number;
+    budgetId?: string;
+    averageSpend: number;
+    maxSpend: number;
+    violationMonthsCount: number;
+    totalMonthsCount: number;
+    suggestedCap: number;
+    reasonEn: string;
+    reasonBn: string;
+  }
+
+  const aiRecommendations: AIRecommendation[] = [];
+
+  allCategoriesWithExpenses.forEach((cat) => {
+    // Find matching budget (case-insensitive)
+    const existingBudget = budgets.find(
+      (b) => b.category !== "all" && b.category.toLowerCase() === cat.toLowerCase()
+    );
+
+    let totalSpend = 0;
+    let monthsCount = 0;
+    let maxSpend = 0;
+    let violationMonthsCount = 0;
+
+    sortedMonths.forEach((month) => {
+      const spend = monthlyCategorySpend[month][cat] || 0;
+      if (spend > 0) {
+        monthsCount++;
+        totalSpend += spend;
+        if (spend > maxSpend) {
+          maxSpend = spend;
+        }
+        if (existingBudget && spend > existingBudget.amount) {
+          violationMonthsCount++;
+        }
+      }
+    });
+
+    const averageSpend = monthsCount > 0 ? totalSpend / monthsCount : 0;
+
+    if (existingBudget) {
+      // Exceeds if we have violations or if we are consistently spent close to limit (> 90% average)
+      const isExceeding = violationMonthsCount > 0 || averageSpend > existingBudget.amount * 0.9;
+      if (isExceeding) {
+        const step = currency === "BDT" ? 500 : 10;
+        const rawSuggestion = Math.max(existingBudget.amount * 1.15, averageSpend * 1.05);
+        const suggestedCap = Math.round(rawSuggestion / step) * step;
+
+        const reasonEn = `Consistent overspending: Exceeded your budget limit (${currencySign}${existingBudget.amount.toLocaleString()}) in ${violationMonthsCount} of ${monthsCount} month(s). Your actual average monthly spend here is ${currencySign}${Math.round(averageSpend).toLocaleString()}. We suggest a sustainable safety cap of ${currencySign}${suggestedCap.toLocaleString()} to match your actual consumption.`;
+        
+        const reasonBn = `ক্রমাগত অতিরিক্ত ব্যয়: আপনার বাজেটের সীমা (${currencySign}${existingBudget.amount.toLocaleString()}) বিগত ${monthsCount} মাসের মধ্যে ${violationMonthsCount} বার ভেঙেছে। আপনার প্রকৃত গড় খরচ হলো ${currencySign}${Math.round(averageSpend).toLocaleString()}। আমরা একটি বাস্তবসম্মত নিরাপত্তা সীমা ${currencySign}${suggestedCap.toLocaleString()} নির্ধারণের পরামর্শ দিচ্ছি।`;
+
+        aiRecommendations.push({
+          category: cat,
+          hasBudget: true,
+          currentLimit: existingBudget.amount,
+          budgetId: existingBudget.id,
+          averageSpend,
+          maxSpend,
+          violationMonthsCount,
+          totalMonthsCount: monthsCount,
+          suggestedCap,
+          reasonEn,
+          reasonBn
+        });
+      }
+    } else {
+      // No budget limit set, check for large unbudgeted transactions
+      const notableSpendingThreshold = currency === "BDT" ? 1500 : 25;
+      if (averageSpend > notableSpendingThreshold) {
+        const step = currency === "BDT" ? 500 : 10;
+        const rawSuggestion = averageSpend * 0.9; // Target a 10% saving cap
+        const suggestedCap = Math.round(rawSuggestion / step) * step;
+
+        const reasonEn = `Unmanaged leak: You spend an average of ${currencySign}${Math.round(averageSpend).toLocaleString()} per month under this category with no budget limit set. Setting a defensive budget limit at ${currencySign}${suggestedCap.toLocaleString()} can help you prevent impulsive leakages!`;
+        
+        const reasonBn = `অনিয়ন্ত্রিত খাতে ব্যয়: এই ক্যাটাগরিতে কোনো বাজেট সীমা সেট করা নেই, কিন্তু আপনার মাসে গড় ব্যয় প্রায় ${currencySign}${Math.round(averageSpend).toLocaleString()}। এই খাতে একটি প্রতিরোধক বাজেট ক্যাপ ${currencySign}${suggestedCap.toLocaleString()} সেট করা হলে আপনার অযাচিত ব্যয় অনেকাংশে কমে যাবে!`;
+
+        aiRecommendations.push({
+          category: cat,
+          hasBudget: false,
+          currentLimit: 0,
+          averageSpend,
+          maxSpend,
+          violationMonthsCount: 0,
+          totalMonthsCount: monthsCount,
+          suggestedCap,
+          reasonEn,
+          reasonBn
+        });
+      }
+    }
+  });
+
+  // Sort: show budgeted exceeding ones first, then unbudgeted by average spending
+  aiRecommendations.sort((a, b) => {
+    if (a.hasBudget && !b.hasBudget) return -1;
+    if (!a.hasBudget && b.hasBudget) return 1;
+    return b.averageSpend - a.averageSpend;
+  });
+
+  const handleApplyCap = async (rec: any) => {
+    setApplyingId(rec.category);
+    try {
+      if (rec.hasBudget && rec.budgetId) {
+        // Delete the old budget
+        onDeleteBudget(rec.budgetId);
+      }
+      // Create/Apply new budget cap
+      onCreateBudget(rec.category, rec.suggestedCap, "category", 85);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setTimeout(() => {
+        setApplyingId(null);
+      }, 700);
+    }
+  };
 
   // Active current month string YYYY-MM
   const currentMonthStr = new Date().toISOString().substring(0, 7);
@@ -297,6 +447,141 @@ export function BudgetsView({
           )}
 
         </div>
+
+      </div>
+
+      {/* AI Insights & Optimization Recommendations section */}
+      <div className="glass-panel p-6 rounded-2xl border border-indigo-500/10 dark:border-indigo-500/10 bg-indigo-500/[0.015] shadow-sm relative overflow-hidden mt-6">
+        
+        {/* Sparkle background glow effect */}
+        <div className="absolute -right-24 -top-24 w-48 h-48 bg-indigo-500/5 dark:bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+        
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200/50 dark:border-slate-800/40 pb-4 mb-5 relative z-10">
+          <div>
+            <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-indigo-500 dark:text-indigo-400 animate-pulse" />
+              <span>{lang === "bn" ? "এআই বাজেট বিশ্লেষণ ও সঞ্চয় সুপারিশ" : "AI Budget Insights & Cap Optimizations"}</span>
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              {lang === "bn" ? "আপনার লেনদেনের ইতিহাস ও কাজের গতি বিশ্লেষণ করে সিস্টেম স্বয়ংক্রিয়ভাবে অনুকূল সীমাগুলির প্রস্তাব করে।" : "Our intelligence engine scans your ledger to detect categories that consistently breach allocations, recommending optimized limits."}
+            </p>
+          </div>
+          <div className="mt-2 sm:mt-0">
+            <span className="inline-flex items-center gap-1 text-[10px] bg-indigo-100 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider border border-indigo-500/10">
+              <Star className="h-2.5 w-2.5 fill-current" />
+              <span>{lang === 'bn' ? "স্মার্ট বিশ্লেষণ" : "Predictive Pulse"}</span>
+            </span>
+          </div>
+        </div>
+
+        {aiRecommendations.length === 0 ? (
+          <div className="flex flex-col items-center justify-center text-center p-8 bg-emerald-500/[0.02] border border-emerald-500/10 rounded-xl">
+            <CheckCircle className="h-8 w-8 text-emerald-500 mb-2.5" />
+            <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+              {lang === 'bn' ? "আপনার বাজেট সীমা সম্পূর্ণরূপে অপ্টিমাইজড!" : "High Financial Discipline Confirmed!"}
+            </h4>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm">
+              {lang === 'bn' 
+                ? "সব বাজেট সীমা চমৎকারভাবে অপ্টিমাইজড! আপনার প্রকৃত মাসিক ব্যয় বাজেটের অধীনে রয়েছে ও কোনো সীমা ভাঙেনি।" 
+                : "All existing expense targets are perfectly balanced. Actual spending is well within parameters with zero runaway leaks detected!"}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 relative z-10">
+            {aiRecommendations.map((rec) => {
+              const isApplying = applyingId === rec.category;
+              return (
+                <div 
+                  key={rec.category}
+                  className="bg-white/40 dark:bg-slate-950/20 border border-slate-200 dark:border-slate-800 rounded-xl p-4.5 flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-md transition-all duration-300 group"
+                >
+                  <div>
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        {/* Status Pills */}
+                        <span className={`inline-block text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded ${
+                          rec.hasBudget 
+                            ? "bg-rose-500/10 text-rose-500 border border-rose-500/15" 
+                            : "bg-amber-500/10 text-amber-500 border border-amber-500/15"
+                        }`}>
+                          {rec.hasBudget 
+                            ? (lang === 'bn' ? "বাজেট সীমা ভঙ্গ" : "Exceeding Set Cap") 
+                            : (lang === 'bn' ? "অসংরক্ষিত ব্যয় খাত" : "Unbudgeted Area")
+                          }
+                        </span>
+                        <h4 className="text-sm font-extrabold text-slate-900 dark:text-slate-100 mt-1.5 flex items-center gap-1.5 font-sans">
+                          <span>{getTranslatedCategory(rec.category, lang)}</span>
+                        </h4>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="text-[9px] text-slate-500 uppercase block tracking-wider">{lang === 'bn' ? "প্রস্তাবিত বাজেট" : "Suggested Cap"}</span>
+                        <span className="text-sm font-black text-indigo-500 font-mono">
+                          {currencySign}{rec.suggestedCap.toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed font-normal mb-4">
+                      {lang === 'bn' ? rec.reasonBn : rec.reasonEn}
+                    </p>
+
+                    {/* Meta stats micro dashboard */}
+                    <div className="grid grid-cols-3 gap-2 p-2.5 bg-slate-100/55 dark:bg-slate-950/40 border border-slate-200/40 dark:border-slate-800/40 rounded-lg text-center text-[10px] font-mono text-slate-500 mb-4.5">
+                      <div>
+                        <span className="block text-[8px] text-slate-450 uppercase mb-0.5">{lang === 'bn' ? "পূর্ববর্তী সীমা" : "Set Limit"}</span>
+                        <span className="font-bold text-slate-700 dark:text-slate-300">
+                          {rec.hasBudget ? `${currencySign}${rec.currentLimit.toLocaleString()}` : "None"}
+                        </span>
+                      </div>
+                      <div className="border-x border-slate-200/50 dark:border-slate-800/50">
+                        <span className="block text-[8px] text-slate-450 uppercase mb-0.5">{lang === 'bn' ? "গড় মাসিক ব্যয়" : "Avg Month Spend"}</span>
+                        <span className="font-bold text-slate-700 dark:text-slate-300">
+                          {currencySign}{Math.round(rec.averageSpend).toLocaleString()}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="block text-[8px] text-slate-450 uppercase mb-0.5">{lang === 'bn' ? "সর্বোচ্চ ব্যয়" : "Peak Month Spend"}</span>
+                        <span className="font-bold text-slate-700 dark:text-slate-300">
+                          {currencySign}{Math.round(rec.maxSpend).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => handleApplyCap(rec)}
+                    disabled={isApplying}
+                    className={`w-full py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer border ${
+                      isApplying
+                        ? "bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-400"
+                        : rec.hasBudget
+                        ? "bg-slate-950/40 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-indigo-600 dark:hover:bg-indigo-600 hover:text-white hover:border-indigo-600 dark:hover:border-indigo-600"
+                        : "bg-indigo-600/10 border-indigo-500/20 text-indigo-600 dark:text-indigo-450 hover:bg-indigo-600 hover:text-white dark:hover:text-white"
+                    }`}
+                  >
+                    {isApplying ? (
+                      <>
+                        <RefreshCw className="h-3 w-3 animate-spin text-indigo-500" />
+                        <span>{lang === "bn" ? "সেট করা হচ্ছে..." : "Applying Cap..."}</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="h-3.5 w-3.5 shrink-0 opacity-80" />
+                        <span>
+                          {rec.hasBudget 
+                            ? (lang === 'bn' ? `লিমিট সমন্বয় করতে চাপুন` : `Adjust Limit to ${currencySign}${rec.suggestedCap.toLocaleString()}`) 
+                            : (lang === 'bn' ? `নতুন বাজেট সেট করতে চাপুন` : `Establish Cap at ${currencySign}${rec.suggestedCap.toLocaleString()}`)
+                          }
+                        </span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
       </div>
 

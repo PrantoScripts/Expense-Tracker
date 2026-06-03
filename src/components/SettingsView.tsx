@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { translations } from "../locales";
-import { Settings, ShieldAlert, Cpu, Heart, Save } from "lucide-react";
+import { Settings, ShieldAlert, Cpu, Heart, Save, FileSpreadsheet, FileDown, Download } from "lucide-react";
+import { exportTransactionsCSV, exportBudgetsCSV, exportGoalsCSV, exportFinancialReportPDF } from "../utils/exportUtils";
 
 interface SettingsViewProps {
   user: any;
@@ -11,6 +12,9 @@ interface SettingsViewProps {
   theme: string;
   setTheme: (theme: string) => void;
   onUpdateUser: (updatedFields: any) => void;
+  transactions?: any[];
+  budgets?: any[];
+  goals?: any[];
 }
 
 export function SettingsView({
@@ -21,7 +25,10 @@ export function SettingsView({
   setCurrency,
   theme,
   setTheme,
-  onUpdateUser
+  onUpdateUser,
+  transactions = [],
+  budgets = [],
+  goals = []
 }: SettingsViewProps) {
   
   const t = translations[lang];
@@ -258,6 +265,112 @@ export function SettingsView({
 
         </div>
 
+      </div>
+
+      {/* Financial Export & Backups Center */}
+      <div className="glass-panel p-6 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-6">
+        <div>
+          <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block">Data backup & ledger portability</span>
+          <h2 className="text-lg font-extrabold text-slate-900 dark:text-white mt-1 flex items-center gap-2">
+            <Download className="h-5 w-5 text-indigo-400 animate-bounce" />
+            <span>{lang === 'bn' ? "ব্যক্তিগত ডাটা এক্সপোর্ট এবং ব্যাকআপ সার্ভিস" : "Personal Data Export & Backups Service"}</span>
+          </h2>
+          <p className="text-xs text-slate-400 mt-1">
+            Download your total account history, budgets targets, and active savings progress in structured formats for tax audits, spreadsheets, offline backup, or safe ledger records.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          
+          {/* Card 1: Transactions */}
+          <div className="bg-slate-50 dark:bg-slate-950/25 border border-slate-205 dark:border-slate-800/85 p-4 rounded-xl flex flex-col justify-between space-y-3">
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block font-mono">Ledger History</span>
+              <h3 className="text-xs font-black text-slate-800 dark:text-slate-100 mt-1">{lang === 'bn' ? "লেনদেনের তালিকা (CSV)" : "Transactions (CSV)"}</h3>
+              <p className="text-[10px] text-slate-400 mt-1">
+                {lang === 'bn' ? `মোট ${transactions.length}টি লেনদেন রয়েছে` : `Archive of ${transactions.length} ledger logs`}
+              </p>
+            </div>
+            <div>
+              <button
+                id="export-tx-csv-btn"
+                onClick={() => exportTransactionsCSV(transactions, lang)}
+                className="w-full py-2 px-2.5 bg-slate-900 hover:bg-slate-850 dark:bg-slate-950/55 dark:hover:bg-slate-900 text-[10px] font-bold rounded-lg text-slate-350 dark:text-slate-300 border border-slate-250 dark:border-slate-850 flex items-center justify-center gap-1.5 cursor-pointer transition"
+                title="Download CSV"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-500" />
+                <span>EXPORT CSV</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Card 2: Budgets */}
+          <div className="bg-slate-50 dark:bg-slate-950/25 border border-slate-205 dark:border-slate-800/85 p-4 rounded-xl flex flex-col justify-between space-y-3">
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block font-mono">Limits & Targets</span>
+              <h3 className="text-xs font-black text-slate-800 dark:text-slate-100 mt-1">{lang === 'bn' ? "বাজেট প্ল্যান তালিকা (CSV)" : "Expense Budgets (CSV)"}</h3>
+              <p className="text-[10px] text-slate-400 mt-1">
+                {lang === 'bn' ? `মোট ${budgets.length}টি বাজেট রয়েছে` : `Contains ${budgets.length} active allocation structures`}
+              </p>
+            </div>
+            <div>
+              <button
+                id="export-bg-csv-btn"
+                onClick={() => exportBudgetsCSV(budgets, lang)}
+                className="w-full py-2 px-2.5 bg-slate-900 hover:bg-slate-850 dark:bg-slate-950/55 dark:hover:bg-slate-900 text-[10px] font-bold rounded-lg text-slate-350 dark:text-slate-300 border border-slate-250 dark:border-slate-850 flex items-center justify-center gap-1.5 cursor-pointer transition"
+                title="Download CSV"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-500" />
+                <span>EXPORT CSV</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Card 3: Goals */}
+          <div className="bg-slate-50 dark:bg-slate-950/25 border border-slate-205 dark:border-slate-800/85 p-4 rounded-xl flex flex-col justify-between space-y-3">
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block font-mono font-bold">Investments</span>
+              <h3 className="text-xs font-black text-slate-800 dark:text-slate-100 mt-1">{lang === 'bn' ? "সঞ্চয় লক্ষ্যসমূহ (CSV)" : "Savings Goals (CSV)"}</h3>
+              <p className="text-[10px] text-slate-400 mt-1">
+                {lang === 'bn' ? `মোট ${goals.length}টি লক্ষ্য রয়েছে` : `Tracking ${goals.length} target investment goals`}
+              </p>
+            </div>
+            <div>
+              <button
+                id="export-goals-csv-btn"
+                onClick={() => exportGoalsCSV(goals, lang)}
+                className="w-full py-2 px-2.5 bg-slate-900 hover:bg-slate-850 dark:bg-slate-950/55 dark:hover:bg-slate-900 text-[10px] font-bold rounded-lg text-slate-350 dark:text-slate-300 border border-slate-250 dark:border-slate-850 flex items-center justify-center gap-1.5 cursor-pointer transition"
+                title="Download CSV"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-500" />
+                <span>EXPORT CSV</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Card 4: Detailed PDF Audit Report */}
+          <div className="bg-indigo-500/5 border border-indigo-500/10 dark:border-indigo-500/20 p-4 rounded-xl flex flex-col justify-between space-y-3">
+            <div>
+              <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block font-mono">Audit Statement</span>
+              <h3 className="text-xs font-black text-slate-800 dark:text-slate-100 mt-1">{lang === 'bn' ? "পূর্ণাঙ্গ পিডিএফ রিপোর্ট" : "Complete Financial PDF"}</h3>
+              <p className="text-[10px] text-slate-400 mt-1">
+                {lang === 'bn' ? "সারসংক্ষেপ সহ রঙিন পিডিএফ বিবরণী" : "Generates formal portfolio with summary metrics analysis"}
+              </p>
+            </div>
+            <div>
+              <button
+                id="export-pdf-report-btn"
+                onClick={() => exportFinancialReportPDF(user, transactions, budgets, goals, currency, lang)}
+                className="w-full py-2 px-2.5 bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold text-white rounded-lg flex items-center justify-center gap-1.5 cursor-pointer transition shadow-sm"
+                title="Download PDF"
+              >
+                <FileDown className="h-3.5 w-3.5 text-indigo-100" />
+                <span>PDF REPORT</span>
+              </button>
+            </div>
+          </div>
+
+        </div>
       </div>
 
     </div>

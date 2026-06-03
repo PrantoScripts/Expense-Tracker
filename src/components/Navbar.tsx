@@ -1,5 +1,6 @@
 import React from "react";
 import { translations } from "../locales";
+import { SpendWiseLogo } from "./SpendWiseLogo";
 import { Bell, Menu, Globe, LogOut, ShieldAlert, Cpu } from "lucide-react";
 
 interface NavbarProps {
@@ -42,9 +43,7 @@ export function Navbar({
         </button>
 
         <div className="flex items-center gap-2 md:hidden">
-          <div className="h-7 w-7 rounded bg-indigo-600 flex items-center justify-center">
-            <span className="text-sm font-bold text-white">SW</span>
-          </div>
+          <SpendWiseLogo className="h-7 w-7 shrink-0" />
           <span className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
             {t.appName}
           </span>

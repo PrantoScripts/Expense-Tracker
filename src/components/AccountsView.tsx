@@ -28,7 +28,53 @@ export function AccountsView({
   const [balance, setBalance] = useState("");
   const [color, setColor] = useState("#4F46E5");
 
-  const currencySign = currency === "BDT" ? "৳" : "$";
+  // Currency converter states
+  const [selectedCurrency, setSelectedCurrency] = useState<"BDT" | "USD" | "EUR">("BDT");
+  const [rates, setRates] = useState<{ USD: number; EUR: number }>({ USD: 0.0085, EUR: 0.0078 });
+  const [loadingRates, setLoadingRates] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<string>("");
+
+  React.useEffect(() => {
+    let active = true;
+    setLoadingRates(true);
+    fetch("https://open.er-api.com/v6/latest/BDT")
+      .then(res => res.json())
+      .then(data => {
+        if (active && data && data.rates) {
+          const usdRate = data.rates.USD || 0.0085;
+          const eurRate = data.rates.EUR || 0.0078;
+          setRates({ USD: usdRate, EUR: eurRate });
+          const nowStr = new Date().toLocaleTimeString(lang === 'bn' ? 'bn-BD' : 'en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+          });
+          setLastUpdated(nowStr);
+        }
+      })
+      .catch(err => {
+        console.warn("Failed to fetch real-time exchange rates, using local fallback:", err);
+      })
+      .finally(() => {
+        if (active) setLoadingRates(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [lang]);
+
+  const totalBalanceBDT = accounts.reduce((sum, acc) => sum + (Number(acc.balance) || 0), 0);
+
+  const convertValue = (valBDT: number, target: "BDT" | "USD" | "EUR") => {
+    if (target === "BDT") return valBDT;
+    return valBDT * (rates[target] || (target === "USD" ? 0.0085 : 0.0078));
+  };
+
+  const getCurrencySign = (curr: "BDT" | "USD" | "EUR") => {
+    if (curr === "BDT") return "৳";
+    if (curr === "USD") return "$";
+    return "€";
+  };
 
   const handleAccountSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,6 +116,48 @@ export function AccountsView({
         <p className="text-xs text-slate-400">
           {lang === 'bn' ? "ক্যাশ, ব্যাংক এবং অন্যান্য মোবাইল ব্যাংকিং হিসাবের খাতা আলাদাভাবে পরিচালনা করুন।" : "Manage multi-accounts portfolios separately (Cash, SCB Cards, bKash, Prime Savings Accounts)."}
         </p>
+      </div>
+
+      {/* Portfolio Wealth Multi-Currency Converter Board */}
+      <div className="glass-panel p-5 rounded-2xl border border-indigo-500/20 dark:border-indigo-500/15 bg-indigo-550/5 shadow-md flex flex-col sm:flex-row justify-between items-start sm:items-center gap-5">
+        <div>
+          <span className="text-[10px] text-indigo-500 dark:text-indigo-400 uppercase tracking-widest font-black block">CONSOLIDATED NET WORTH</span>
+          <div className="flex items-baseline gap-2 mt-1">
+            <span className="text-3xl font-black font-mono text-slate-900 dark:text-white transition-all">
+              {getCurrencySign(selectedCurrency)}{convertValue(totalBalanceBDT, selectedCurrency).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+            </span>
+            <span className="text-xs font-semibold text-slate-400 capitalize">
+              {lang === 'bn' ? "তহবিলে মোট ব্যালেন্স" : "combined portfolios in"} {selectedCurrency}
+            </span>
+          </div>
+          <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1.5 flex items-center gap-1.5">
+            {loadingRates ? (
+              <span className="text-indigo-500 dark:text-indigo-400 animate-pulse font-regular">● Syncing live mid-market rates...</span>
+            ) : lastUpdated ? (
+              <span className="text-[10px] font-medium text-slate-500">● Live Rates: 1 BDT = {rates.USD.toFixed(5)} USD | {rates.EUR.toFixed(5)} EUR (Synced at {lastUpdated})</span>
+            ) : (
+              <span className="text-[10px] font-medium text-amber-500">● Offline Mode: Operating on cached mid-market baseline exchange rates</span>
+            )}
+          </p>
+        </div>
+
+        {/* Realtime toggles BDT, USD and EUR */}
+        <div className="flex bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 p-1 rounded-xl gap-1 shrink-0 shadow-inner">
+          {(["BDT", "USD", "EUR"] as const).map((curr) => (
+            <button
+              key={curr}
+              type="button"
+              onClick={() => setSelectedCurrency(curr)}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition cursor-pointer select-none ${
+                selectedCurrency === curr
+                  ? "bg-indigo-600 text-white shadow-sm font-bold"
+                  : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white"
+              }`}
+            >
+              {curr} ({getCurrencySign(curr)})
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -207,7 +295,7 @@ export function AccountsView({
                     <div className="mt-5 text-left">
                       <span className="text-[10px] text-slate-500 block uppercase tracking-wider">{t.balance}</span>
                       <span className="text-xl font-extrabold font-mono text-slate-900 dark:text-slate-100">
-                        {currencySign}{acc.balance.toLocaleString()}
+                        {getCurrencySign(selectedCurrency)}{convertValue(acc.balance, selectedCurrency).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                       </span>
                     </div>
                   </div>

@@ -14,7 +14,10 @@ import {
   ArrowUpDown,
   FileSpreadsheet,
   FileJson,
-  Printer
+  Printer,
+  ArrowUpRight,
+  ArrowDownRight,
+  PiggyBank
 } from "lucide-react";
 
 interface TransactionsViewProps {
@@ -67,10 +70,10 @@ export function TransactionsView({
   // Apply full filters on client side
   const filteredTxs = useMemo(() => {
     return transactions.filter(tx => {
-      // Search text query
+      // Search text query safely
       const textMatches =
-        tx.category?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        tx.note?.toLowerCase().includes(searchQuery.toLowerCase());
+        (tx.category || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (tx.note || "").toLowerCase().includes(searchQuery.toLowerCase());
       
       // Type
       const typeMatches = typeFilter === "all" || tx.type === typeFilter;
@@ -95,6 +98,25 @@ export function TransactionsView({
       return 0;
     });
   }, [transactions, searchQuery, typeFilter, categoryFilter, fromDate, toDate, minAmount, maxAmount, sortBy]);
+
+  // Calculate summary metrics for the filtered transactions view
+  const summary = useMemo(() => {
+    let income = 0;
+    let expenses = 0;
+    filteredTxs.forEach((tx) => {
+      const val = Number(tx.amount) || 0;
+      if (tx.type === "income") {
+        income += val;
+      } else if (tx.type === "expense") {
+        expenses += val;
+      }
+    });
+    return {
+      income,
+      expenses,
+      net: income - expenses,
+    };
+  }, [filteredTxs]);
 
   // Calendar generation logic for current month
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
@@ -208,7 +230,71 @@ export function TransactionsView({
       </div>
 
       {viewMode === 'list' ? (
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="space-y-6">
+          
+          {/* Filtered List Summary Bar */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            
+            {/* Income Card */}
+            <div className="flex items-center gap-4 bg-emerald-500/5 dark:bg-emerald-500/10 border border-emerald-500/10 dark:border-emerald-500/20 p-4 rounded-2xl shadow-sm">
+              <div className="p-3 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+                <ArrowUpRight className="h-5 w-5" />
+              </div>
+              <div className="space-y-0.5">
+                <span className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider block">
+                  {lang === 'bn' ? "ফিল্টারকৃত মোট আয়" : "Filtered Total Income"}
+                </span>
+                <span className="text-base sm:text-lg font-black font-mono text-emerald-600 dark:text-emerald-400 block">
+                  {currencySign}{summary.income.toLocaleString()}
+                </span>
+              </div>
+            </div>
+
+            {/* Expense Card */}
+            <div className="flex items-center gap-4 bg-rose-500/5 dark:bg-rose-500/10 border border-rose-500/10 dark:border-rose-500/20 p-4 rounded-2xl shadow-sm">
+              <div className="p-3 rounded-xl bg-rose-500/10 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400">
+                <ArrowDownRight className="h-5 w-5" />
+              </div>
+              <div className="space-y-0.5">
+                <span className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider block">
+                  {lang === 'bn' ? "ফিল্টারকৃত মোট ব্যয়" : "Filtered Total Expenses"}
+                </span>
+                <span className="text-base sm:text-lg font-black font-mono text-rose-600 dark:text-rose-400 block">
+                  {currencySign}{summary.expenses.toLocaleString()}
+                </span>
+              </div>
+            </div>
+
+            {/* Net Savings Card */}
+            <div className={`flex items-center gap-4 p-4 rounded-2xl shadow-sm border ${
+              summary.net >= 0
+                ? 'bg-indigo-500/5 dark:bg-indigo-500/10 border-indigo-500/10 dark:border-indigo-500/20'
+                : 'bg-amber-500/5 dark:bg-amber-500/10 border-amber-500/10 dark:border-amber-500/20'
+            }`}>
+              <div className={`p-3 rounded-xl ${
+                summary.net >= 0
+                  ? 'bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400'
+                  : 'bg-amber-550/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400'
+              }`}>
+                <PiggyBank className="h-5 w-5" />
+              </div>
+              <div className="space-y-0.5">
+                <span className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider block">
+                  {lang === 'bn' ? "ফিল্টারকৃত নিট সঞ্চয়" : "Filtered Net Savings"}
+                </span>
+                <span className={`text-base sm:text-lg font-black font-mono block ${
+                  summary.net >= 0
+                    ? 'text-indigo-600 dark:text-indigo-400'
+                    : 'text-amber-600 dark:text-amber-400'
+                }`}>
+                  {summary.net < 0 ? '-' : ''}{currencySign}{Math.abs(summary.net).toLocaleString()}
+                </span>
+              </div>
+            </div>
+
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           
           {/* Advanced Search Sidebar Block */}
           <div className="lg:col-span-1 glass-panel p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
@@ -342,13 +428,28 @@ export function TransactionsView({
           {/* Right main table view */}
           <div className="lg:col-span-3 space-y-4">
             
-            {/* Quick Export tools panel */}
-            <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/60 p-3 rounded-2xl border border-slate-200 dark:border-slate-800">
-              <span className="text-xs text-slate-700 dark:text-slate-300 font-medium">
-                {lang === 'bn' ? `মোট ${filteredTxs.length}টি তথ্য ফিল্টার করা হয়েছে` : `Query matches: ${filteredTxs.length} journals`}
-              </span>
+            {/* Quick Export tools panel & Search Input */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-50 dark:bg-slate-900/60 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full md:w-auto">
+                <span className="text-xs text-slate-700 dark:text-slate-300 font-medium shrink-0">
+                  {lang === 'bn' ? `মোট ${filteredTxs.length}টি তথ্য ফিল্টার করা হয়েছে` : `Query matches: ${filteredTxs.length} journals`}
+                </span>
+
+                {/* Inline Search input */}
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
+                  <input
+                    id="table-tx-search-input"
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={lang === 'bn' ? "নোট বা ক্যাটাগরি দিয়ে খুঁজুন..." : "Filter note or category..."}
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-indigo-500/80 rounded-xl pl-9 pr-4 py-1.5 text-xs text-slate-800 dark:text-slate-100 outline-none placeholder-slate-400 dark:placeholder-slate-600 font-sans shadow-sm"
+                  />
+                </div>
+              </div>
               
-              <div className="flex gap-2">
+              <div className="flex gap-2 self-end md:self-auto">
                 <a
                   href="/api/export/csv"
                   download
@@ -367,7 +468,7 @@ export function TransactionsView({
                 </a>
                 <button
                   onClick={handlePdfPrint}
-                  className="p-1 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-800 rounded-xl text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                  className="p-1 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-805 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-800 rounded-xl text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
                 >
                   <Printer className="h-3.5 w-3.5" />
                   <span>Print</span>
@@ -460,6 +561,8 @@ export function TransactionsView({
           </div>
 
         </div>
+
+      </div>
       ) : (
         /* Calendar view grid */
         <div className="glass-panel p-6 rounded-2xl shadow border border-slate-200 dark:border-slate-800">
