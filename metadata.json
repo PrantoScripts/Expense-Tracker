@@ -1,0 +1,6 @@
+{
+  "name": "SpendWise",
+  "description": "Smart Expense Tracking Made Simple - SaaS application with AI financial coaching, multi-currency accounts, receipts parsing, budget tracking, and savings goals.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
